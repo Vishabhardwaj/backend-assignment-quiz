@@ -1,0 +1,87 @@
+import java.util.List;
+import java.util.Optional;
+import java.util.Date;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/quizzes")
+public class QuizController {
+
+    @Autowired
+    private QuizRepository quizRepository;
+
+    // Create a new quiz
+    @PostMapping
+    public ResponseEntity<?> createQuiz(@RequestBody Quiz quiz) {
+        try {
+            quizRepository.save(quiz);
+            return ResponseEntity.status(HttpStatus.CREATED).body(quiz.getId());
+        } catch (Exception e) {
+            System.err.println("Error creating quiz: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error creating quiz");
+        }
+    }
+
+    // Retrieve the active quiz
+    @GetMapping("/active")
+    public ResponseEntity<?> getActiveQuiz() {
+        try {
+            Date now = new Date();
+            Optional<Quiz> quiz = quizRepository.findByStartDateLessThanEqualAndEndDateGreaterThanEqual(now, now);
+            if (quiz.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("No active quiz");
+            } else {
+                return ResponseEntity.ok().body(new QuizResponse(quiz.get().getId(), quiz.get().getQuestion(), quiz.get().getOptions()));
+            }
+        } catch (Exception e) {
+            System.err.println("Error retrieving active quiz: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error retrieving active quiz");
+        }
+    }
+
+    // Retrieve the result of a quiz
+    @GetMapping("/{id}/result")
+    public ResponseEntity<?> getQuizResult(@PathVariable String id) {
+        try {
+            Optional<Quiz> quiz = quizRepository.findById(id);
+            if (quiz.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("Quiz not found");
+            } else if (new Date().before(quiz.get().getEndDate())) {
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body("Quiz has not ended yet");
+            } else {
+                return ResponseEntity.ok().body(new QuizResult(quiz.get().getRightAnswer()));
+            }
+        } catch (Exception e) {
+            System.err.println("Error retrieving quiz result: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error retrieving quiz result");
+        }
+    }
+
+    // Retrieve all quizzes
+    @GetMapping("/all")
+    public ResponseEntity<?> getAllQuizzes() {
+        try {
+            List<Quiz> quizzes = quizRepository.findAll();
+            return ResponseEntity.ok().body(quizzes);
+        } catch (Exception e) {
+            System.err.println("Error retrieving quizzes: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Error retrieving quizzes");
+        }
+    }
+
+    // Handle not found error
+    @ExceptionHandler(NotFoundException.class)
+    public ResponseEntity<?> handleNotFoundException(NotFoundException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+    }
+
+    // Handle internal server error
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<?> handleInternalServerError(Exception e) {
+        System.err.println("Internal server error: " + e.getMessage());
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal server error");
+    }
+}
